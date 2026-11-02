@@ -33,12 +33,9 @@ SESSION_COOKIE = "portfolio_admin_session"
 OWNER_RECOVERY_KEY = os.getenv("OWNER_RECOVERY_KEY", "").strip()
 
 ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "PORTFOLIO_ALLOWED_ORIGINS",
-        "http://127.0.0.1:8001,http://localhost:8001"
-    ).split(",")
-    if origin.strip()
+    "https://portfolio-frontend-bay-beta.vercel.app",
+    "http://127.0.0.1:8001",
+    "http://localhost:8001"
 ]
 
 PUBLIC_API_GET_PREFIXES = (
