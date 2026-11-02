@@ -31,6 +31,7 @@ PASSWORD_MAX_AGE_DAYS = 30
 SESSION_MAX_AGE_SECONDS = 8 * 60 * 60
 SESSION_COOKIE = "portfolio_admin_session"
 OWNER_RECOVERY_KEY = os.getenv("OWNER_RECOVERY_KEY", "").strip()
+
 ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
@@ -39,6 +40,7 @@ ALLOWED_ORIGINS = [
     ).split(",")
     if origin.strip()
 ]
+
 PUBLIC_API_GET_PREFIXES = (
     "/api/projects", "/api/skills", "/api/websites", "/api/blogs",
     "/api/certifications", "/api/courses", "/api/photos", "/api/links"
@@ -142,7 +144,6 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Enable CORS for local and web development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -162,7 +163,6 @@ async def protect_admin_api(request: Request, call_next):
 def seed_initial_data():
     db = SessionLocal()
     try:
-        # Check if already seeded
         if db.query(models.Project).count() == 0:
             initial_projects = [
                 models.Project(
@@ -236,7 +236,6 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-
 def get_google_sheet():
     credentials_json = os.getenv("GOOGLE_CREDENTIALS_JSON", "").strip()
     if not credentials_json:
@@ -250,12 +249,10 @@ def get_google_sheet():
         raise RuntimeError("GOOGLE_CREDENTIALS_JSON is not valid service-account JSON") from error
     return gspread.authorize(credentials).open("Portfolio_Database").worksheet("inquiries")
 
-
 class PortfolioSubmission(BaseModel):
     visitor_name: str
     visitor_email: EmailStr
     message: str
-
 
 @app.post("/api/submit", tags=["Google Sheets"])
 def save_portfolio_data(data: PortfolioSubmission):
@@ -309,9 +306,9 @@ def save_portfolio_data(data: PortfolioSubmission):
         "ml_output": ml_prediction,
     }
 
-# ============================================================================== 
+# ==============================================================================
 # Owner Authentication
-# ============================================================================== 
+# ==============================================================================
 def set_admin_cookie(response: Response, token: str):
     response.set_cookie(
         SESSION_COOKIE,
@@ -396,7 +393,6 @@ def rotate_expired_password(request: Request, response: Response, passwords: sch
 
 @app.post("/api/auth/recover-password", response_model=schemas.AdminAuthResponse, tags=["Admin Auth"])
 def recover_owner_password(request: Request, response: Response, recovery: schemas.AdminRecoveryRequest, db: Session = Depends(get_db)):
-    """Recover an owner account with a deployment-only secret, without changing the DB schema."""
     if not OWNER_RECOVERY_KEY or not hmac.compare_digest(recovery.recovery_key, OWNER_RECOVERY_KEY):
         raise HTTPException(status_code=401, detail="Recovery key is invalid or not configured")
 
@@ -459,7 +455,7 @@ def health_check():
     }
 
 # ==============================================================================
-# 1. PROJECTS ENDPOINTS (with ML auto-categorization)
+# 1. PROJECTS ENDPOINTS
 # ==============================================================================
 @app.get("/api/projects", response_model=List[schemas.ProjectResponse], tags=["Projects"])
 def get_projects(
@@ -491,7 +487,6 @@ def create_project(project_in: schemas.ProjectCreate, db: Session = Depends(get_
     category = project_in.category
     tags = project_in.tags
 
-    # Trigger ML auto-categorization & tagging if category/tags are default or empty
     if not category or category in ["General", ""]:
         ml_res = ml_engine.categorize_and_tag(project_in.title, project_in.description or "")
         category = ml_res["category"]
@@ -625,7 +620,7 @@ def delete_website(website_id: int, db: Session = Depends(get_db)):
     return None
 
 # ==============================================================================
-# 4. BLOGS ENDPOINTS (with ML auto-categorization)
+# 4. BLOGS ENDPOINTS
 # ==============================================================================
 @app.get("/api/blogs", response_model=List[schemas.BlogResponse], tags=["Blogs"])
 def get_blogs(category: Optional[str] = None, db: Session = Depends(get_db)):
@@ -646,7 +641,6 @@ def create_blog(blog_in: schemas.BlogCreate, db: Session = Depends(get_db)):
     category = blog_in.category
     tags = blog_in.tags
 
-    # Auto-tag and categorize if not set
     if not category or category in ["General", ""]:
         ml_res = ml_engine.categorize_and_tag(blog_in.title, f"{blog_in.summary or ''} {blog_in.content or ''}")
         category = ml_res["category"]
@@ -859,9 +853,7 @@ def delete_link(link_id: int, db: Session = Depends(get_db)):
 # 9. CONTACT FORM MESSAGES ENDPOINTS
 # ==============================================================================
 @app.post("/api/contact", response_model=schemas.ContactMessageResponse, status_code=status.HTTP_201_CREATED, tags=["Contact"])
-def submit_contact_form(
-    msg_in: schemas.ContactMessageCreate
-):
+def submit_contact_form(msg_in: schemas.ContactMessageCreate):
     try:
         send_contact_emails(msg_in)
     except Exception as error:
@@ -880,27 +872,11 @@ def submit_contact_form(
 def get_contact_messages():
     return []
 
-@app.patch("/api/contact/{message_id}", response_model=schemas.ContactMessageResponse, tags=["Contact"])
-def update_contact_message(
-    message_id: int,
-    message_update: schemas.ContactMessageUpdate
-):
-    raise HTTPException(status_code=404, detail="Contact messages are managed in Gmail")
-
-@app.delete("/api/contact/{message_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Contact"])
-def delete_contact_message(message_id: int):
-    raise HTTPException(status_code=404, detail="Contact messages are managed in Gmail")
-
 # ==============================================================================
 # 10. MACHINE LEARNING CATEGORIZATION & TAGGING API
 # ==============================================================================
 @app.post("/api/ml/categorize", response_model=schemas.MLCategorizeResponse, tags=["Machine Learning"])
 def ml_categorize(req: schemas.MLCategorizeRequest):
-    """
-    NLP Categorization and Auto-Tagging Endpoint.
-    Automatically assigns entries to 'Cyber Security', 'Digital Forensics',
-    'Web Design', or 'AI/ML' based on text semantics.
-    """
     res = ml_engine.categorize_and_tag(
         title=req.title or "",
         description=req.description or "",
@@ -920,31 +896,46 @@ def ml_categorize(req: schemas.MLCategorizeRequest):
 def upload_file(file: UploadFile = File(...)):
     raise HTTPException(status_code=503, detail="Media storage is disabled")
 
-
 @app.get("/api/media/{file_id}", tags=["Media"])
 def serve_drive_media(file_id: str):
     raise HTTPException(status_code=404, detail="Media storage is disabled")
 
-# ============================================================================== 
-# Frontend Files
-# ============================================================================== 
+# ==============================================================================
+# Frontend Files / Cloud Health Check
+# ==============================================================================
 FRONTEND_DIR = os.path.dirname(os.path.abspath(__file__))
 
 @app.get("/", include_in_schema=False)
 def serve_portfolio():
-    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return JSONResponse({
+        "status": "online",
+        "message": "Portfolio FastAPI + ML Backend is running successfully on Render!",
+        "docs_url": "/docs"
+    })
 
 @app.get("/main.js", include_in_schema=False)
 def serve_main_script():
-    return FileResponse(os.path.join(FRONTEND_DIR, "main.js"), media_type="text/javascript")
+    path = os.path.join(FRONTEND_DIR, "main.js")
+    if os.path.exists(path):
+        return FileResponse(path, media_type="text/javascript")
+    raise HTTPException(status_code=404, detail="File not found")
 
 @app.get("/admin.html", include_in_schema=False)
 def serve_admin_dashboard():
-    return FileResponse(os.path.join(FRONTEND_DIR, "admin.html"))
+    path = os.path.join(FRONTEND_DIR, "admin.html")
+    if os.path.exists(path):
+        return FileResponse(path)
+    raise HTTPException(status_code=404, detail="File not found")
 
 @app.get("/colored-logo.png", include_in_schema=False)
 def serve_logo():
-    return FileResponse(os.path.join(FRONTEND_DIR, "colored-logo.png"), media_type="image/png")
+    path = os.path.join(FRONTEND_DIR, "colored-logo.png")
+    if os.path.exists(path):
+        return FileResponse(path, media_type="image/png")
+    raise HTTPException(status_code=404, detail="File not found")
 
 if __name__ == "__main__":
     import socket
