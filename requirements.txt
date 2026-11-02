@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg[binary]
+gspread
+google-auth
+pydantic[email]
+python-dotenv
+scikit-learn
+joblib
+numpy
