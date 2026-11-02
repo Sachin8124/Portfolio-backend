@@ -33,7 +33,7 @@ SESSION_COOKIE = "portfolio_admin_session"
 OWNER_RECOVERY_KEY = os.getenv("OWNER_RECOVERY_KEY", "").strip()
 
 ALLOWED_ORIGINS = [
-    "https://portfolio-frontend-bay-beta.vercel.app",
+    "https://portfolio-frontend.netlify.app/",
     "http://127.0.0.1:8001",
     "http://localhost:8001"
 ]
